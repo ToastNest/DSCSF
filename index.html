@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cluster Management</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        h2 { border-bottom: 2px solid #333; padding-bottom: 5px; }
+        label { display: block; margin-top: 10px; }
+        input, button { margin-top: 5px; padding: 8px; width: 100%; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #nodesList { margin-top: 20px; list-style-type: none; padding: 0; }
+        .node-item { padding: 8px; border: 1px solid #ddd; margin-top: 5px; background: #f9f9f9; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h2>Register a Node</h2>
+    <label>Node ID:</label>
+    <input type="text" id="nodeId">
+    <label>CPU Cores:</label>
+    <input type="number" id="nodeCpu" min="1">
+    <button onclick="registerNode()">Register Node</button>
+
+    <h2>Schedule a Pod</h2>
+    <label>Pod ID:</label>
+    <input type="text" id="podId">
+    <label>CPU Required:</label>
+    <input type="number" id="podCpu" min="1">
+    <button onclick="schedulePod()">Schedule Pod</button>
+
+    <h2>Nodes in Cluster</h2>
+    <button onclick="fetchNodes()">Refresh Nodes</button>
+    <ul id="nodesList"></ul>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:8000"; // FastAPI server
+
+        async function registerNode() {
+            const nodeId = document.getElementById("nodeId").value.trim();
+            const nodeCpu = parseInt(document.getElementById("nodeCpu").value);
+            if (!nodeId || !nodeCpu) return showError("Please enter valid node details.");
+
+            try {
+                const response = await fetch(`${API_BASE}/register_node/`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ node_id: nodeId, cpu: nodeCpu })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                alert(`✅ ${data.message}`);
+                fetchNodes();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function schedulePod() {
+            const podId = document.getElementById("podId").value.trim();
+            const podCpu = parseInt(document.getElementById("podCpu").value);
+            if (!podId || !podCpu) return showError("Please enter valid pod details.");
+
+            try {
+                const response = await fetch(`${API_BASE}/schedule_pod/`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pod_id: podId, cpu_req: podCpu })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail);
+                alert(`✅ ${data.message}`);
+                fetchNodes();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function fetchNodes() {
+            try {
+                const response = await fetch(`${API_BASE}/nodes/`);
+                const nodes = await response.json();
+                const nodeList = document.getElementById("nodesList");
+                nodeList.innerHTML = "";
+
+                if (Object.keys(nodes).length === 0) {
+                    nodeList.innerHTML = "<li class='error'>No active nodes.</li>";
+                    return;
+                }
+
+                for (const [nodeId, details] of Object.entries(nodes)) {
+                    const timeDiff = (Date.now() / 1000 - details.last_heartbeat).toFixed(1);
+                    const status = timeDiff > 10 ? "🔴 (Inactive)" : "🟢 (Active)";
+                    const podList = details.pods.length ? details.pods.join(", ") : "None";
+
+                    nodeList.innerHTML += `
+                        <li class="node-item">
+                            <b>${nodeId}</b> - ${details.cpu} CPU (Available: ${details.available_cpu}) <br>
+                            <b>Pods:</b> ${podList} <br>
+                            Heartbeat: ${timeDiff}s ago ${status}
+                        </li>
+                    `;
+                }
+            } catch (err) {
+                showError("Error fetching nodes.");
+            }
+        }
+
+        function showError(message) {
+            alert(`❌ Error: ${message}`);
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(fetchNodes, 5000);
+        fetchNodes(); // Load nodes on page load
+    </script>
+
+</body>
+</html>
