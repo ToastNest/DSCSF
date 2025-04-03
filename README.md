@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/18b3fa99-98e3-4917-8831-46c68c6088fb)Pip Requirements :
+Pip Requirements :
 
 pip install fastapi uvicorn requests
 
