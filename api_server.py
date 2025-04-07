@@ -7,16 +7,16 @@ import time
 
 app = FastAPI()
 
-# Data Structures
-nodes = {}  # { "node_id": {"cpu": 4, "available_cpu": 4, "pods": [], "last_heartbeat": time.time()} }
-pods = []  # { "pod_id": 1, "cpu_req": 2 }
+
+nodes = {} 
+pods = []  
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"], 
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 class NodeRegister(BaseModel):
@@ -32,26 +32,23 @@ def register_node(node: NodeRegister):
     if node.node_id in nodes:
         raise HTTPException(status_code=400, detail="Node already exists")
 
-    # Define resource limits (CPU and Memory)
-    cpu_limit = node.cpu  # Number of CPUs allocated
-    memory_limit = f"{node.cpu * 512}m"  # Example: 512MB per CPU
+    cpu_limit = node.cpu  
+    memory_limit = f"{node.cpu * 512}m"  
 
-    # Start the node container
     container_name = f"node_{node.node_id}"
     try:
         subprocess.run([
             "docker", "run", "-d", "--rm",
             "--name", container_name,
-            "--cpus", str(cpu_limit),  # Limit CPU usage
+            "--cpus", str(cpu_limit),  
             "--memory", memory_limit,
             "-e", f"NODE_ID={node.node_id}",
-            "--network", "host",  # Limit memory usage
-            "alpinekube-node"  # Docker image name (must match your built image)
+            "--network", "host",  
+            "alpinekube-node"  
         ], check=True)
     except subprocess.CalledProcessError:
         raise HTTPException(status_code=500, detail="Failed to start Docker container")
 
-    # Register node in internal state
     nodes[node.node_id] = {
         "cpu": node.cpu,
         "available_cpu": node.cpu,
@@ -61,6 +58,7 @@ def register_node(node: NodeRegister):
     }
     print(nodes)
     return {"message": f"Node {node.node_id} registered and container started"}
+
 @app.post("/heartbeat/{node_id}")
 def heartbeat(node_id: str):
     if node_id not in nodes:
@@ -70,7 +68,7 @@ def heartbeat(node_id: str):
 
 @app.get("/nodes/")
 def get_nodes():
-    print("Current Nodes:", nodes)  # Debugging print
+    print("Current Nodes:", nodes)  
     return nodes
 
 @app.post("/schedule_pod/")
@@ -78,7 +76,6 @@ def schedule_pod(pod: PodRequest):
     # Check for duplicate pod ID
     if any(p["pod_id"] == pod.pod_id for p in pods):
         raise HTTPException(status_code=400, detail="Pod ID already exists")
-
     # Find best node (most available CPU that can still fit the pod)
     best_node_id = None
     max_available_cpu = -1
@@ -98,17 +95,14 @@ def schedule_pod(pod: PodRequest):
     pods.append({"pod_id": pod.pod_id, "cpu_req": pod.cpu_req, "node_id": best_node_id})
 
     return {"message": f"Pod {pod.pod_id} scheduled on Node {best_node_id}"}
-
-
+  
 def health_check():
     while True:
         current_time = time.time()
         for node_id, node in list(nodes.items()):
-            if current_time - node["last_heartbeat"] > 10:  # Node timeout (10s)
+            if current_time - node["last_heartbeat"] > 10: 
                 print(f"Node {node_id} is down!")
                 del nodes[node_id]
-        time.sleep(5)  # Run health check every 5 seconds
+        time.sleep(5)  
 
-# Start health monitor in the background
 threading.Thread(target=health_check, daemon=True).start()
-
