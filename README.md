@@ -2,6 +2,8 @@ Pip Requirements :
 
 pip install fastapi uvicorn requests
 
+First install:
+docker build -t alpinekube-node .
 
 In a terminal :
 uvicorn api_server:app --reload
