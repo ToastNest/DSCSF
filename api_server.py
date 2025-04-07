@@ -73,6 +73,9 @@ def get_nodes():
 
 @app.post("/schedule_pod/")
 def schedule_pod(pod: PodRequest):
+    # Check for duplicate pod ID
+    if any(p["pod_id"] == pod.pod_id for p in pods):
+        raise HTTPException(status_code=400, detail="Pod ID already exists")
     # Find best node (most available CPU that can still fit the pod)
     best_node_id = None
     max_available_cpu = -1
@@ -92,7 +95,7 @@ def schedule_pod(pod: PodRequest):
     pods.append({"pod_id": pod.pod_id, "cpu_req": pod.cpu_req, "node_id": best_node_id})
 
     return {"message": f"Pod {pod.pod_id} scheduled on Node {best_node_id}"}
-
+  
 def health_check():
     while True:
         current_time = time.time()
