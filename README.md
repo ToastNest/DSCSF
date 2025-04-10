@@ -11,6 +11,9 @@ uvicorn api_server:app --reload
 Fedora: 
 python -m uvicorn api_server:app --reload
 
+Ubuntu:
+python3 -m uvicorn api_server:app --reload
+
 In another new terminal(s):
 python node.py node1
 python node.py node2
