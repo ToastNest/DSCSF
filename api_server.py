@@ -26,6 +26,7 @@ class NodeRegister(BaseModel):
 class PodRequest(BaseModel):
     pod_id: str
     cpu_req: int
+    duration: int
 
 @app.post("/register_node/")
 def register_node(node: NodeRegister):
@@ -36,17 +37,19 @@ def register_node(node: NodeRegister):
     memory_limit = f"{node.cpu * 512}m"  
 
     container_name = f"node_{node.node_id}"
+
     try:
-        subprocess.run([
+        result = subprocess.run([
             "docker", "run", "-d", "--rm",
             "--name", container_name,
-            "--cpus", str(cpu_limit),  
+            "--cpus", str(cpu_limit),
             "--memory", memory_limit,
             "-e", f"NODE_ID={node.node_id}",
-            "--network", "host",  
-            "alpinekube-node"  
-        ], check=True)
+            "--network", "host",
+            "alpinekube-node"
+            ], capture_output=True, text=True)
     except subprocess.CalledProcessError:
+        print("Docker error:", result.stderr)
         raise HTTPException(status_code=500, detail="Failed to start Docker container")
 
     nodes[node.node_id] = {
@@ -73,10 +76,6 @@ def get_nodes():
 
 @app.post("/schedule_pod/")
 def schedule_pod(pod: PodRequest):
-    # Check for duplicate pod ID
-    if any(p["pod_id"] == pod.pod_id for p in pods):
-        raise HTTPException(status_code=400, detail="Pod ID already exists")
-    # Find best node (most available CPU that can still fit the pod)
     best_node_id = None
     max_available_cpu = -1
 
@@ -88,21 +87,48 @@ def schedule_pod(pod: PodRequest):
     if best_node_id is None:
         raise HTTPException(status_code=400, detail="No available nodes with required resources")
 
-    # Schedule pod
     node = nodes[best_node_id]
     node["available_cpu"] -= pod.cpu_req
     node["pods"].append(pod.pod_id)
-    pods.append({"pod_id": pod.pod_id, "cpu_req": pod.cpu_req, "node_id": best_node_id})
 
-    return {"message": f"Pod {pod.pod_id} scheduled on Node {best_node_id}"}
-  
+    pods.append({
+        "pod_id": pod.pod_id,
+        "cpu_req": pod.cpu_req,
+        "node_id": best_node_id,
+        "status": "Running"
+    })
+
+    # Start a thread to mark the pod as completed after duration
+    def complete_pod_lifecycle():
+        time.sleep(pod.duration)
+        node["available_cpu"] += pod.cpu_req
+        node["pods"].remove(pod.pod_id)
+        for p in pods:
+            if p["pod_id"] == pod.pod_id:
+                p["status"] = "Completed"
+        print(f"Pod {pod.pod_id} completed after {pod.duration} seconds.")
+
+    threading.Thread(target=complete_pod_lifecycle, daemon=True).start()
+
+    return {"message": f"Pod {pod.pod_id} scheduled on Node {best_node_id} for {pod.duration} seconds."}
+
 def health_check():
     while True:
         current_time = time.time()
         for node_id, node in list(nodes.items()):
-            if current_time - node["last_heartbeat"] > 10: 
-                print(f"Node {node_id} is down!")
-                del nodes[node_id]
+            if current_time - node["last_heartbeat"] > 10:
+                if not node.get("unhealthy", False):
+                    node["unhealthy"] = True
+                    print(f"Node {node_id} marked unhealthy.")
+                elif current_time - node["last_heartbeat"] > 30:
+                    print(f"Node {node_id} removed due to prolonged failure.")
+                    del nodes[node_id]
+
         time.sleep(5)  
+
+@app.get("/pods/")
+def get_pods():
+    return pods
+
 
 threading.Thread(target=health_check, daemon=True).start()
