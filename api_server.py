@@ -11,7 +11,7 @@ app = FastAPI()
 nodes = {} 
 pods = []  
 
-
+waiting_pods = []
 
 app.add_middleware(
     CORSMiddleware,
@@ -118,15 +118,74 @@ def health_check():
     while True:
         current_time = time.time()
         for node_id, node in list(nodes.items()):
-            if current_time - node["last_heartbeat"] > 10:
+            time_diff = current_time - node["last_heartbeat"]
+
+            if time_diff > 6:
                 if not node.get("unhealthy", False):
                     node["unhealthy"] = True
-                    print(f"Node {node_id} marked unhealthy.")
-                elif current_time - node["last_heartbeat"] > 30:
-                    print(f"Node {node_id} removed due to prolonged failure.")
+                    print(f"⚠️ Node {node_id} marked as unhealthy. Attempting restart...")
+
+                    container_name = node["container_name"]
+                    cpu_limit = node["cpu"]
+                    memory_limit = f"{cpu_limit * 512}m"
+
+                    # Attempt to restart the container
+                    try:
+                        subprocess.run([
+                            "docker", "run", "-d",
+                            "--name", container_name,
+                            "--cpus", str(cpu_limit),
+                            "--memory", memory_limit,
+                            "-e", f"NODE_ID={node_id}",
+                            "--network", "host",
+                            "alpinekube-node"
+                        ], check=True)
+
+                        node["last_heartbeat"] = time.time()
+                        node["unhealthy"] = False
+                        print(f"✅ Node {node_id} successfully restarted.")
+                    except subprocess.CalledProcessError:
+                        print(f"❌ Failed to restart node {node_id}. Monitoring for permanent failure.")
+
+                elif time_diff > 30:
+                    print(f"⛔ Node {node_id} removed after restart failure and prolonged downtime.")
+                    failed_pods = node["pods"]
                     del nodes[node_id]
 
-        time.sleep(5)  
+                    for pod_id in failed_pods:
+                        pod_info = next((p for p in pods if p["pod_id"] == pod_id), None)
+                        if pod_info:
+                            reallocated = False
+                            for new_node_id, new_node in nodes.items():
+                                if new_node["available_cpu"] >= pod_info["cpu_req"]:
+                                    new_node["available_cpu"] -= pod_info["cpu_req"]
+                                    new_node["pods"].append(pod_id)
+                                    pod_info["node_id"] = new_node_id
+                                    print(f"🔁 Pod {pod_id} reallocated to Node {new_node_id}")
+                                    reallocated = True
+                                    break
+                            if not reallocated:
+                                if nodes:
+                                    waiting_pods.append(pod_info)
+                                    print(f"⏳ Pod {pod_id} added to waitlist due to resource limits.")
+                                else:
+                                    print("❌ Unable to reallocate pods. No active nodes.")
+
+        process_waiting_pods()
+        time.sleep(5)
+
+
+def process_waiting_pods():
+    for pod in waiting_pods[:]:
+        for node_id, node in nodes.items():
+            if node["available_cpu"] >= pod["cpu_req"]:
+                node["available_cpu"] -= pod["cpu_req"]
+                node["pods"].append(pod["pod_id"])
+                pod["node_id"] = node_id
+                print(f"✅ Waitlisted pod {pod['pod_id']} assigned to node {node_id}")
+                waiting_pods.remove(pod)
+                break
+
 
 @app.get("/pods/")
 def get_pods():
