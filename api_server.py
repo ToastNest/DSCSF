@@ -11,6 +11,8 @@ app = FastAPI()
 nodes = {} 
 pods = []  
 
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -40,7 +42,7 @@ def register_node(node: NodeRegister):
 
     try:
         result = subprocess.run([
-            "docker", "run", "-d", "--rm",
+            "docker", "run", "-d", 
             "--name", container_name,
             "--cpus", str(cpu_limit),
             "--memory", memory_limit,
