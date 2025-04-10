@@ -20,3 +20,6 @@ In another new terminal(s): \
 python node.py node1 \
 python node.py node2 \
 python cli.py \
+
+### CPU Allocation:
+Note : CPU Cores that can be allocated to a Node is restricted by number of CPU Cores available to the Docker Engine.
