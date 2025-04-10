@@ -30,11 +30,18 @@
     <input type="text" id="podId">
     <label>CPU Required:</label>
     <input type="number" id="podCpu" min="1">
+    <label>Duration (seconds):</label>
+    <input type="number" id="podDuration" min="1">
     <button onclick="schedulePod()">Schedule Pod</button>
+
 
     <h2>Nodes in Cluster</h2>
     <button onclick="fetchNodes()">Refresh Nodes</button>
     <ul id="nodesList"></ul>
+
+    <h2>Pods</h2>
+    <ul id="podsList"></ul>
+
 
     <script>
         const API_BASE = "http://127.0.0.1:8000"; // FastAPI server
@@ -63,23 +70,26 @@
         async function schedulePod() {
             const podId = document.getElementById("podId").value.trim();
             const podCpu = parseInt(document.getElementById("podCpu").value);
-            if (!podId || !podCpu) return showError("Please enter valid pod details.");
+            const podDuration = parseInt(document.getElementById("podDuration").value);
+            if (!podId || !podCpu || !podDuration) return showError("Please enter valid pod details.");
 
             try {
                 const response = await fetch(`${API_BASE}/schedule_pod/`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pod_id: podId, cpu_req: podCpu })
+                    body: JSON.stringify({ pod_id: podId, cpu_req: podCpu, duration: podDuration })
                 });
 
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail);
                 alert(`✅ ${data.message}`);
                 fetchNodes();
+                fetchPods();  // refresh pod list
             } catch (err) {
                 showError(err.message);
             }
         }
+
 
         async function fetchNodes() {
             try {
@@ -110,14 +120,49 @@
                 showError("Error fetching nodes.");
             }
         }
+        async function fetchPods(silent = false) {
+            try {
+                const response = await fetch(`${API_BASE}/pods/`);
+                const podList = await response.json();
+                const podsListElement = document.getElementById("podsList");
+                podsListElement.innerHTML = "";
+
+                if (podList.length === 0) {
+                    if (!silent) {
+                        podsListElement.innerHTML = "<li class='error'>No pods scheduled yet.</li>";
+                    }
+                    return;
+                }
+
+                for (const pod of podList) {
+                    podsListElement.innerHTML += `
+                        <li class="node-item">
+                            <b>Pod ID:</b> ${pod.pod_id} <br>
+                            <b>CPU:</b> ${pod.cpu_req} <br>
+                            <b>Node:</b> ${pod.node_id} <br>
+                            <b>Status:</b> ${pod.status}
+                        </li>
+                    `;
+                }
+            } catch (err) {
+                if (!silent) showError("Error fetching pods.");
+            }
+        }
+
+
 
         function showError(message) {
             alert(`❌ Error: ${message}`);
         }
 
         // Auto-refresh every 5 seconds
-        setInterval(fetchNodes, 5000);
-        fetchNodes(); // Load nodes on page load
+        // Auto-refresh every 5 seconds
+        setInterval(() => {
+            fetchNodes();
+            fetchPods(true);
+        }, 5000);
+
+
     </script>
 
 </body>
