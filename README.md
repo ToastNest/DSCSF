@@ -24,5 +24,6 @@ python node.py node1 \
 python node.py node2 \
 python cli.py \
 
-### CPU Allocation:
-Note : CPU Cores that can be allocated to a Node is restricted by number of CPU Cores available to the Docker Engine.
+### Addtional Information:
+1. CPU Cores that can be allocated to a Node is restricted by number of CPU Cores available to the Docker Engine. \
+2. Minimum Duration of Pod is recommended to be set at 45s for succesful reallocation.
