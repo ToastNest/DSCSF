@@ -113,7 +113,7 @@ def schedule_pod(pod: PodRequest):
             return
 
         if best_node_id not in nodes:
-            print(f"❌ Pod {pod.pod_id} failed to complete execution. Node {best_node_id} no longer exists. Sending to Waitlist")
+            print(f"Pod {pod.pod_id} failed to complete execution. Node {best_node_id} no longer exists. Sending to Waitlist")
             pod_info["status"] = "Terminated from Old Node"
             return
 
@@ -123,7 +123,7 @@ def schedule_pod(pod: PodRequest):
             current_node["pods"].remove(pod.pod_id)
 
         pod_info["status"] = "Completed"
-        print(f"✅ Pod {pod.pod_id} completed after {pod.duration} seconds.")
+        print(f"Pod {pod.pod_id} completed after {pod.duration} seconds.")
 
     threading.Thread(target=complete_pod_lifecycle, daemon=True).start()
 
@@ -139,27 +139,26 @@ def health_check():
             if time_diff > 6:
                 if not node.get("unhealthy", False):
                     node["unhealthy"] = True
-                    print(f"⚠️ Node {node_id} marked as unhealthy. Attempting restart...")
+                    print(f"Node {node_id} marked as unhealthy. Attempting restart...")
 
                     container_name = node["container_name"]
                     cpu_limit = node["cpu"]
                     memory_limit = f"{cpu_limit * 512}m"
 
-                    # Attempt to restart the container
                     try:
                         subprocess.run([
                             "docker","start", container_name
                         ],check=True)
 
                     except subprocess.CalledProcessError:
-                        print(f"❌ Failed to restart node {node_id}. Monitoring for permanent failure.")
+                        print(f"Failed to restart node {node_id}. Monitoring for permanent failure.")
                     else:
                         node["last_heartbeat"] = time.time()
                         node["unhealthy"] = False
-                        print(f"✅ Node {node_id} successfully restarted.")
+                        print(f"Node {node_id} successfully restarted.")
 
                 elif time_diff > 15:
-                    print(f"⛔ Node {node_id} removed after restart failure and prolonged downtime.")
+                    print(f"Node {node_id} removed after restart failure and prolonged downtime.")
                     failed_pods = node["pods"]
                     del nodes[node_id]
 
@@ -172,17 +171,17 @@ def health_check():
                                     new_node["available_cpu"] -= pod_info["cpu_req"]
                                     new_node["pods"].append(pod_id)
                                     pod_info["node_id"] = new_node_id
-                                    print(f"🔁 Pod {pod_id} reallocated to Node {new_node_id}")
+                                    print(f"Pod {pod_id} reallocated to Node {new_node_id}")
                                     reallocated = True
                                     break
                             if not reallocated:
                                 if nodes:
                                     pod_info["status"] = "Waiting"
                                     waiting_pods.append(pod_info)
-                                    print(f"⏳ Pod {pod_id} added to waitlist due to resource limits.")
+                                    print(f"Pod {pod_id} added to waitlist due to resource limits.")
                                 else:
                                     pod_info["status"] = "Terminated"
-                                    print("❌ Unable to reallocate pods. No active nodes.")
+                                    print("Unable to reallocate pods. No active nodes.")
 
         process_waiting_pods()
         time.sleep(5)
@@ -197,7 +196,7 @@ def process_waiting_pods():
                 pod["node_id"] = node_id
                 pod["status"] = "Running"
                 pod["start_time"] = time.time()
-                print(f"🔁 Waitlisted pod {pod['pod_id']} assigned to node {node_id}")
+                print(f"PWaitlisted pod {pod['pod_id']} assigned to node {node_id}")
                 waiting_pods.remove(pod)
 
                 def complete_pod_lifecycle(pod_info):
@@ -209,7 +208,7 @@ def process_waiting_pods():
                     current_node_id = pod_info["node_id"]
                     if current_node_id not in nodes:
                         pod_info["status"] = "Terminated"
-                        print(f"❌ Pod {pod_info['pod_id']} cannot complete. Node {current_node_id} no longer exists.")
+                        print(f"Pod {pod_info['pod_id']} cannot complete. Node {current_node_id} no longer exists.")
                         return
 
                     node_ref = nodes[current_node_id]
@@ -218,7 +217,7 @@ def process_waiting_pods():
                         node_ref["pods"].remove(pod_info["pod_id"])
 
                     pod_info["status"] = "Completed"
-                    print(f"✅ Pod {pod_info['pod_id']} completed after reallocation.")
+                    print(f"Pod {pod_info['pod_id']} completed after reallocation.")
 
                 threading.Thread(target=complete_pod_lifecycle,args=(pod,),daemon=True).start()
 
