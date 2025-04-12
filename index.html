@@ -105,7 +105,7 @@
 
                 for (const [nodeId, details] of Object.entries(nodes)) {
                     const timeDiff = (Date.now() / 1000 - details.last_heartbeat).toFixed(1);
-                    const status = timeDiff > 10 ? "🔴 (Inactive)" : "🟢 (Active)";
+                    const status = timeDiff > 6 ? "🔴 (Inactive)" : "🟢 (Active)";
                     const podList = details.pods.length ? details.pods.join(", ") : "None";
 
                     nodeList.innerHTML += `

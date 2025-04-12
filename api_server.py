@@ -131,21 +131,25 @@ def health_check():
 
                     # Attempt to restart the container
                     try:
+                        # subprocess.run([
+                        #     "docker", "run", "-d",
+                        #     "--name", container_name,
+                        #     "--cpus", str(cpu_limit),
+                        #     "--memory", memory_limit,
+                        #     "-e", f"NODE_ID={node_id}",
+                        #     "--network", "host",
+                        #     "alpinekube-node"
+                        # ], check=True)
                         subprocess.run([
-                            "docker", "run", "-d",
-                            "--name", container_name,
-                            "--cpus", str(cpu_limit),
-                            "--memory", memory_limit,
-                            "-e", f"NODE_ID={node_id}",
-                            "--network", "host",
-                            "alpinekube-node"
-                        ], check=True)
+                            "docker","start", container_name
+                        ],check=True)
 
+                    except subprocess.CalledProcessError:
+                        print(f"❌ Failed to restart node {node_id}. Monitoring for permanent failure.")
+                    else:
                         node["last_heartbeat"] = time.time()
                         node["unhealthy"] = False
                         print(f"✅ Node {node_id} successfully restarted.")
-                    except subprocess.CalledProcessError:
-                        print(f"❌ Failed to restart node {node_id}. Monitoring for permanent failure.")
 
                 elif time_diff > 30:
                     print(f"⛔ Node {node_id} removed after restart failure and prolonged downtime.")
@@ -166,9 +170,11 @@ def health_check():
                                     break
                             if not reallocated:
                                 if nodes:
+                                    pod_info["status"] = "waiting"
                                     waiting_pods.append(pod_info)
                                     print(f"⏳ Pod {pod_id} added to waitlist due to resource limits.")
                                 else:
+                                    pod_info["status"] = "terminated"
                                     print("❌ Unable to reallocate pods. No active nodes.")
 
         process_waiting_pods()
